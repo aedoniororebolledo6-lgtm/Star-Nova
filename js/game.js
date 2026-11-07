@@ -185,6 +185,16 @@ export class Game {
     $('btnMute').textContent = Audio.muted ? '♪̸' : '♪';
   }
 
+  /* Botón "atrás" de Android: pausa, cierra paneles o sale desde la pantalla de título. */
+  backButton() {
+    if (this.state === 'play') { this.pause(true); return 'pausa'; }
+    if (this.state === 'pause') { this.pause(false); return 'sigue'; }
+    if (this.state === 'journal') { this.openJournal(false); return 'cerrar'; }
+    if (this.state === 'dialog') { this.advanceDialog(); return 'dialogo'; }
+    if (this.state === 'dead' || this.state === 'ending') return 'nada';
+    return 'salir';
+  }
+
   toggleMute() { Audio.setMuted(!Audio.muted); $('btnMute').textContent = Audio.muted ? '♪̸' : '♪'; }
 
   start(fromButton) {
@@ -195,7 +205,7 @@ export class Game {
     if (!this.hideHud) this.hud.show(true);
     if (fromButton) {
       Audio.init();
-      if (this.mobile) {
+      if (this.mobile && !window.StarNovaAndroid) {
         const el = document.documentElement;
         if (el.requestFullscreen) el.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {});
       }

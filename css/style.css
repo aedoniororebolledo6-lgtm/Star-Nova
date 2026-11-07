@@ -110,6 +110,10 @@ button.big:hover { background: #5d5075; }
 .journal-m.done { opacity: .6; }
 .journal-m button { float: right; padding: 4px 10px; font-size: 12px; }
 
+button.update { background: #ffe39a; border: none; box-shadow: 0 4px 16px rgba(242,196,108,.6); animation: pulse 1.6s infinite ease-in-out; }
+@keyframes pulse { 50% { transform: scale(1.05); } }
+.version { position: absolute; right: 10px; bottom: 6px; font-size: 10px; opacity: .55; pointer-events: none; }
+
 /* Táctil */
 .touch { position: absolute; inset: 0; pointer-events: none; }
 .stick-zone { position: absolute; left: 0; bottom: 0; width: 42%; height: 70%; pointer-events: auto; }

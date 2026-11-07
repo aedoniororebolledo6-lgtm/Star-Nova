@@ -12,7 +12,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   ojos:
-    runs-on: ubuntu-latest
+    # Playwright aún no soporta Ubuntu 26.04 (ubuntu-latest): se fija 24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4

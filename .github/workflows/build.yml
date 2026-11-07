@@ -1,0 +1,138 @@
+# Compila la APK de Android (el juego va dentro, funciona sin internet).
+# En ramas solo verifica que compile; en main publica el release "latest" con la APK y su QR.
+name: Compilar APK
+on:
+  push:
+    paths-ignore: ['**.md', 'docs/**', 'tools/**', 'ci/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Instalar Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36 build-tools;36.0.0"
+
+      - name: Instalar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+
+      # Llave de firma fija (para que cada APK se instale encima de la anterior), sin guardarla en el repositorio:
+      # 1) si existen los Secrets SIGNING_KEYSTORE_B64 + SIGNING_PASSWORD (+ SIGNING_ALIAS opcional), se usan;
+      # 2) si no, se crea una la primera vez y se guarda en la caché PRIVADA del repositorio.
+      - name: Recuperar llave de firma (caché privada)
+        uses: actions/cache@v4
+        with:
+          path: ~/.starnova-signing
+          key: starnova-signing-v1
+
+      - name: Preparar llave de firma
+        env:
+          KS_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.SIGNING_PASSWORD }}
+          KS_ALIAS: ${{ secrets.SIGNING_ALIAS }}
+        run: |
+          D="$HOME/.starnova-signing"
+          mkdir -p "$D"
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$D/secret.jks"
+            KS="$D/secret.jks"; P="$KS_PASS"; A="${KS_ALIAS:-starnova}"
+            echo "Usando la llave de los Secrets"
+          else
+            if [ ! -f "$D/release.jks" ]; then
+              openssl rand -hex 16 > "$D/pass.txt"
+              keytool -genkeypair -keystore "$D/release.jks" -storepass "$(cat "$D/pass.txt")" -keypass "$(cat "$D/pass.txt")" \
+                -alias starnova -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Star Nova, O=nioro, C=CL"
+              echo "Llave nueva creada (se guarda en la caché privada)"
+            fi
+            KS="$D/release.jks"; P="$(cat "$D/pass.txt")"; A="starnova"
+          fi
+          echo "::add-mask::$P"
+          {
+            echo "STARNOVA_KEYSTORE=$KS"
+            echo "STARNOVA_KEYSTORE_PASSWORD=$P"
+            echo "STARNOVA_KEY_ALIAS=$A"
+          } >> "$GITHUB_ENV"
+
+      - name: Copiar el juego dentro de la app
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp -r index.html manifest.webmanifest icon.svg css js vendor android/app/src/main/assets/
+
+      - name: Compilar APK firmada
+        id: gradle
+        run: |
+          set -o pipefail
+          gradle -p android :app:assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log || {
+            grep -a -A5 -E "^e: |What went wrong" build.log | grep -av "^--" | head -16 | while IFS= read -r l; do echo "::error::${l:0:400}"; done
+            exit 1
+          }
+
+      - name: Publicar errores de compilación
+        if: failure() && steps.gradle.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          grep -a -E "^e: |error:|What went wrong|FAILED|Execution failed" -A4 build.log | head -c 100000 > err.txt || true
+          [ -s err.txt ] || tail -c 20000 build.log > err.txt
+          gh release delete build-error --yes --cleanup-tag || true
+          gh release create build-error --title "Error de compilación" --notes-file err.txt --prerelease
+
+      - name: Limpiar aviso de error anterior
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete build-error --yes --cleanup-tag || true
+
+      - name: Preparar APK y código QR
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk dist/StarNova.apk
+          sudo apt-get update -y
+          sudo apt-get install -y qrencode
+          URL="https://github.com/${{ github.repository }}/releases/latest/download/StarNova.apk"
+          qrencode -o dist/qr.png -s 14 -m 3 "$URL"
+          echo "Enlace de descarga: $URL"
+
+      - name: Publicar versión (enlace fijo, solo rama main)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag -y || true
+          gh release create latest dist/StarNova.apk dist/qr.png \
+            --target "$(git rev-parse HEAD)" \
+            --title "Star Nova (compilación ${{ github.run_number }})" \
+            --notes "Escanea el QR o abre StarNova.apk desde el celular para instalar. Compilación #${{ github.run_number }}."
+
+      - name: Resumen
+        run: |
+          {
+            echo "## Star Nova — APK"
+            echo ""
+            echo "Descarga: https://github.com/${{ github.repository }}/releases/latest/download/StarNova.apk"
+            echo ""
+            echo "QR: https://github.com/${{ github.repository }}/releases/latest/download/qr.png"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar APK como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: StarNova-apk
+          path: dist/

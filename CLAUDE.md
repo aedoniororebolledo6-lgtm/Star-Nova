@@ -84,6 +84,7 @@ El dueño habla **español**: responde siempre en español, claro y sin tecnicis
 - Textos visibles **en español**. Estilo de la interfaz: suave, redondeado, tipografía serif para títulos.
 - Nada de identificadores de modelo en commits, PR ni código.
 - Licencias: Three.js (MIT) y Rapier (Apache-2.0) en `vendor/`; mantener sus avisos.
+- **Nunca** subir llaves, contraseñas ni tokens al repositorio (es público). Van en Secrets o en la caché de CI.
 
 ## Control de avance
 Hecho (v0.1):

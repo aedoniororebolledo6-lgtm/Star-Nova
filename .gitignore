@@ -1,3 +1,12 @@
 node_modules/
 ojos/
 *.log
+
+# Android: los archivos del juego se copian en CI
+android/app/src/main/assets/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.jks
+*.keystore
